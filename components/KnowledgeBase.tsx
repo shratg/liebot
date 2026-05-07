@@ -13,6 +13,12 @@ const KnowledgeBase: React.FC = () => {
   // const [filteredArticles, setFilteredArticles] = useState(articles);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [showContributeForm, setShowContributeForm] = useState(false);
+  const [contributeData, setContributeData] = useState({
+    title: '',
+    description: '',
+    contact: ''
+  });
 
   const articles: Article[] = [
     {
@@ -240,6 +246,22 @@ const KnowledgeBase: React.FC = () => {
     }
   };
 
+  const handleContributeClick = () => {
+    setShowContributeForm(true);
+  };
+
+  const handleContributeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    alert(`感谢您的贡献！\n\n案例标题：${contributeData.title}\n案例描述：${contributeData.description}\n联系方式：${contributeData.contact}\n\n我们会在3个工作日内审核您的案例，通过后将添加到知识库中。`);
+    setContributeData({ title: '', description: '', contact: '' });
+    setShowContributeForm(false);
+  };
+
+  const handleContributeClose = () => {
+    setShowContributeForm(false);
+    setContributeData({ title: '', description: '', contact: '' });
+  };
+
   return (
     <>
       <div className="space-y-8 animate-in fade-in duration-500">
@@ -295,7 +317,10 @@ const KnowledgeBase: React.FC = () => {
             <h3 className="text-2xl font-bold text-white mb-2">想了解更多特定场景？</h3>
             <p className="text-blue-100/80">您可以直接在测谎工作台模拟对应场景，AI专家将根据您的具体对话生成个性化的深度拆解报告。</p>
           </div>
-          <button className="bg-white text-blue-600 font-bold py-3 px-8 rounded-xl hover:bg-blue-50 transition-colors">
+          <button 
+            onClick={handleContributeClick}
+            className="bg-white text-blue-600 font-bold py-3 px-8 rounded-xl hover:bg-blue-50 transition-colors active:scale-95"
+          >
             贡献反诈案例
           </button>
         </div>
@@ -411,6 +436,98 @@ const KnowledgeBase: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 贡献案例弹窗 */}
+      {showContributeForm && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300"
+          onClick={handleContributeClose}
+        >
+          <div 
+            className="bg-gray-900 border border-gray-800 rounded-3xl w-full max-w-2xl shadow-2xl animate-in zoom-in duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center p-6 border-b border-gray-800">
+              <h3 className="text-2xl font-bold text-white">贡献反诈案例</h3>
+              <button
+                onClick={handleContributeClose}
+                className="text-gray-400 hover:text-white p-2 rounded-full hover:bg-gray-800 transition-colors"
+                aria-label="关闭弹窗"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleContributeSubmit} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    案例标题 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={contributeData.title}
+                    onChange={(e) => setContributeData({...contributeData, title: e.target.value})}
+                    placeholder="请输入案例标题，如：新型网购退款诈骗"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    案例详细描述 <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    value={contributeData.description}
+                    onChange={(e) => setContributeData({...contributeData, description: e.target.value})}
+                    placeholder="请详细描述诈骗手法、过程、识别要点和防范建议..."
+                    rows={6}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors resize-none"
+                  />
+                  <p className="text-sm text-gray-500 mt-1">请尽可能详细描述，这有助于我们更好地分析诈骗手法</p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    联系方式（选填）
+                  </label>
+                  <input
+                    type="text"
+                    value={contributeData.contact}
+                    onChange={(e) => setContributeData({...contributeData, contact: e.target.value})}
+                    placeholder="邮箱/电话/微信，审核通过后会通知您"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-4 pt-4">
+                <button
+                  type="button"
+                  onClick={handleContributeClose}
+                  className="px-6 py-3 bg-gray-800 hover:bg-gray-700 text-white font-semibold rounded-xl transition-colors flex-1"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-xl transition-all flex-1 active:scale-95"
+                >
+                  提交案例
+                </button>
+              </div>
+              
+              <div className="text-xs text-gray-500 text-center pt-4 border-t border-gray-800">
+                <p>感谢您为反诈事业做出的贡献！我们会对所有案例进行审核，符合要求的案例将在3个工作日内添加到知识库。</p>
+              </div>
+            </form>
           </div>
         </div>
       )}

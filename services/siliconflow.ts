@@ -3,91 +3,45 @@ import { SYSTEM_INSTRUCTION } from "../constants";
 import { AnalysisResult } from "../types";
 
 export class SiliconFlowService {
-  private apiKey: string;
-  private baseURL: string;
+  private apiUrl: string;
 
   constructor() {
-    // 注意：在浏览器端需要使用 import.meta.env
-    this.apiKey = import.meta.env.VITE_SILICONFLOW_API_KEY || '';
-    this.baseURL = 'https://api.siliconflow.cn/v1';
-    
-    if (!this.apiKey && import.meta.env.MODE === 'development') {
-      console.warn('⚠️ 未找到SiliconFlow API密钥，将使用模拟数据');
-    }
+    this.apiUrl = import.meta.env.VITE_ANALYZE_API_URL || '/api/analyze';
   }
 
   async analyzeChat(messages: string[], imageBase64?: string): Promise<AnalysisResult> {
-    // 如果没有API密钥，使用模拟数据
-    if (!this.apiKey) {
-      console.log('使用模拟数据（无API密钥）');
-      return this.getMockAnalysis(messages);
-    }
-
     try {
-      // 1. 构建用户消息
-      const userContent: any[] = [
-        {
-          type: "text",
-          text: `请分析以下聊天记录，判断是否为诈骗：\n${messages.join('\n')}`,
-        },
-      ];
-
-      // 2. 如果存在图片，添加到消息中
-      if (imageBase64) {
-        userContent.push({
-          type: "image_url",
-          image_url: {
-            url: `data:image/jpeg;base64,${imageBase64}`,
-          },
-        });
-      }
-
-      // 3. 准备请求体
-      const requestBody = {
-        model: "deepseek-ai/DeepSeek-V3.2", // 免费模型
-        messages: [
-          {
-            role: "system",
-            content: SYSTEM_INSTRUCTION || "你是一个反诈专家，分析聊天记录中的诈骗特征。",
-          },
-          {
-            role: "user",
-            content: userContent,
-          },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-        max_tokens: 2000,
-      };
-
-      // 4. 发起API请求
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
+      const response = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${this.apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          messages,
+          imageBase64,
+          systemInstruction: SYSTEM_INSTRUCTION || "你是一个反诈专家，分析聊天记录中的诈骗特征。",
+        }),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('API错误:', response.status, errorText);
-        return this.getMockAnalysis(messages);
+        throw new Error(`分析接口错误: ${response.status} ${errorText}`);
       }
 
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      
-      if (!content) {
-        throw new Error("AI响应无内容");
+      if (!data?.result) {
+        throw new Error("AI响应无结果");
       }
 
-      return JSON.parse(content) as AnalysisResult;
+      return data.result as AnalysisResult;
 
     } catch (error) {
       console.error("SiliconFlow分析错误:", error);
-      return this.getMockAnalysis(messages);
+      if (import.meta.env.DEV) {
+        console.warn('开发环境下回退到模拟数据');
+        return this.getMockAnalysis(messages);
+      }
+      throw error;
     }
   }
 

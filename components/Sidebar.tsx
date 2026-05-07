@@ -51,7 +51,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate }) => {
       <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-          <span className="text-xs font-semibold text-slate-400">Gemini 3.0 Engine</span>
+          <span className="text-xs font-semibold text-slate-400">Deepseek-V3 Engine</span>
         </div>
         <p className="text-[10px] text-slate-500 leading-relaxed">系统实时防御中，已接入全球反诈情报网络。</p>
       </div>
