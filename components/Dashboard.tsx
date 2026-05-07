@@ -609,15 +609,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onStart }) => {
               className="transform transition-all duration-500 hover:scale-105"
               style={{
                 animationDelay: `${600 + idx * 100}ms`,
-                animation: 'slideInRight 0.5s ease-out forwards',
+                animationName: 'slideInRight',
+                animationDuration: '0.5s',
+                animationTimingFunction: 'ease-out',
+                animationFillMode: 'forwards',
                 opacity: 0,
                 transform: 'translateX(-20px)'
               }}
             >
-              <p className="text-sm text-slate-300 font-medium flex items-center gap-2">
+              <div className="text-sm text-slate-300 font-medium flex items-center gap-2">
                 {item.title}
                 <div className="w-1 h-1 bg-blue-500 rounded-full" />
-              </p>
+              </div>
               <p className="text-xs text-slate-500">{item.desc}</p>
             </div>
           ))}

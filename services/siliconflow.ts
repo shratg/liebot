@@ -4,44 +4,173 @@ import { AnalysisResult } from "../types";
 
 export class SiliconFlowService {
   private apiUrl: string;
+  private siliconFlowApiKey: string | null = null;
 
   constructor() {
-    this.apiUrl = import.meta.env.VITE_ANALYZE_API_URL || '/api/analyze';
+    this.apiUrl = '/api/analyze';
+    // 从 localStorage 读取 API 密钥（用户可以在设置中输入）
+    if (typeof window !== 'undefined') {
+      this.siliconFlowApiKey = localStorage.getItem('siliconflow_api_key');
+    }
   }
 
   async analyzeChat(messages: string[], imageBase64?: string): Promise<AnalysisResult> {
+    // 如果用户配置了 API 密钥，优先使用直接调用硅基流动 API
+    if (this.siliconFlowApiKey) {
+      console.log('使用用户配置的 API 密钥，直接调用硅基流动 API');
+      return this.callSiliconFlowDirect(messages, this.siliconFlowApiKey);
+    }
+
+    // 否则调用后端代理端点
+    console.log('调用后端 /api/analyze 端点');
+    return this.callApiEndpoint(messages, imageBase64);
+  }
+
+  // 直接调用硅基流动 API（本地开发模式）
+  private async callSiliconFlowDirect(messages: string[], apiKey: string): Promise<AnalysisResult> {
     try {
-      const response = await fetch(this.apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messages,
-          imageBase64,
-          systemInstruction: SYSTEM_INSTRUCTION || "你是一个反诈专家，分析聊天记录中的诈骗特征。",
-        }),
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`分析接口错误: ${response.status} ${errorText}`);
+      try {
+        console.log('正在调用硅基流动 API...', { url: 'https://api.siliconflow.cn/v1/chat/completions' });
+
+        const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'deepseek-ai/DeepSeek-V4-Flash',
+            messages: [
+              {
+                role: 'system',
+                content: SYSTEM_INSTRUCTION || '你是一个拥有20年刑侦经验和反诈经验的顶级专家。你的任务是分析用户提供的聊天记录，识别其中的诈骗风险。请严格按照JSON格式返回结果。'
+              },
+              {
+                role: 'user',
+                content: `请分析以下聊天记录，并按JSON格式返回分析结果。聊天记录如下：\n\n${messages.join('\n')}\n\n请返回以下JSON结构（不要返回其他文本）：{"riskScore": 0-100, "fraudType": "string", "reasoningChain": ["string"], "keySuspectWords": ["string"], "dimensions": {"emotional": 0-100, "monetary": 0-100, "logic": 0-100, "identity": 0-100}, "suggestions": ["string"]}`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 1500,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('硅基流动 API 错误:', response.status, errorText);
+          throw new Error(`硅基流动 API 错误: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        console.log('硅基流动 API 响应:', data);
+
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+          throw new Error('无效的 API 响应格式');
+        }
+
+        const content = data.choices[0].message.content;
+        console.log('AI 响应内容:', content);
+
+        // 解析 JSON 响应
+        let analysisResult;
+        try {
+          analysisResult = JSON.parse(content);
+        } catch {
+          // 尝试从 markdown 代码块中提取 JSON
+          const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+          if (jsonMatch) {
+            analysisResult = JSON.parse(jsonMatch[1]);
+          } else {
+            // 尝试从字符串中找到 JSON 对象
+            const objectMatch = content.match(/\{[\s\S]*\}/);
+            if (objectMatch) {
+              analysisResult = JSON.parse(objectMatch[0]);
+            } else {
+              throw new Error('无法从响应中提取 JSON');
+            }
+          }
+        }
+
+        console.log('解析后的分析结果:', analysisResult);
+
+        return {
+          riskScore: Math.min(100, Math.max(0, analysisResult.riskScore || 0)),
+          fraudType: analysisResult.fraudType || '未知',
+          reasoningChain: analysisResult.reasoningChain || [],
+          keySuspectWords: analysisResult.keySuspectWords || [],
+          dimensions: {
+            emotional: Math.min(100, Math.max(0, analysisResult.dimensions?.emotional || 0)),
+            monetary: Math.min(100, Math.max(0, analysisResult.dimensions?.monetary || 0)),
+            logic: Math.min(100, Math.max(0, analysisResult.dimensions?.logic || 0)),
+            identity: Math.min(100, Math.max(0, analysisResult.dimensions?.identity || 0)),
+          },
+          suggestions: analysisResult.suggestions || [],
+        };
+
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('API 请求超时，请重试');
+        }
+        throw fetchError;
       }
+    } catch (error) {
+      console.error('直接调用硅基流动 API 失败:', error);
+      throw error;
+    }
+  }
 
-      const data = await response.json();
-      if (!data?.result) {
-        throw new Error("AI响应无结果");
+  // 调用后端代理端点（Vercel 部署模式）
+  private async callApiEndpoint(messages: string[], imageBase64?: string): Promise<AnalysisResult> {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒超时
+
+      try {
+        const response = await fetch(this.apiUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages,
+            imageBase64,
+            systemInstruction: SYSTEM_INSTRUCTION || "你是一个反诈专家，分析聊天记录中的诈骗特征。",
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`分析接口错误: ${response.status} ${errorText}`);
+        }
+
+        const data = await response.json();
+        if (!data?.result) {
+          throw new Error("AI响应无结果");
+        }
+
+        return data.result as AnalysisResult;
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('API请求超时，请重试');
+        }
+        throw fetchError;
       }
-
-      return data.result as AnalysisResult;
 
     } catch (error) {
-      console.error("SiliconFlow分析错误:", error);
-      if (import.meta.env.DEV) {
-        console.warn('开发环境下回退到模拟数据');
-        return this.getMockAnalysis(messages);
-      }
-      throw error;
+      console.error("分析错误:", error);
+      console.warn('已回退到本地分析');
+      return this.getMockAnalysis(messages);
     }
   }
 
@@ -137,54 +266,23 @@ export class SiliconFlowService {
     
     return reasoning.slice(0, 4);
   }
+
+  // 获取和设置 API 密钥
+  getApiKey(): string | null {
+    return this.siliconFlowApiKey;
+  }
+
+  setApiKey(key: string): void {
+    this.siliconFlowApiKey = key;
+    if (typeof window !== 'undefined') {
+      if (key) {
+        localStorage.setItem('siliconflow_api_key', key);
+      } else {
+        localStorage.removeItem('siliconflow_api_key');
+      }
+    }
+  }
 }
 
 // 创建单例实例
 export const siliconFlowService = new SiliconFlowService();
-
-
-// import { GoogleGenAI, Type } from "@google/genai";
-// import { SYSTEM_INSTRUCTION } from "../constants";
-// import { AnalysisResult } from "../types";
-
-// export class GeminiService {
-//   private ai: GoogleGenAI;
-
-//   constructor() {
-//     this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
-//   }
-
-//   async analyzeChat(messages: string[], imageBase64?: string): Promise<AnalysisResult> {
-//     try {
-//       const prompt = `分析以下聊天记录：\n${messages.join('\n')}${imageBase64 ? '\n[包含一张附件图片]' : ''}`;
-      
-//       const contents: any = { parts: [{ text: prompt }] };
-//       if (imageBase64) {
-//         contents.parts.push({
-//           inlineData: {
-//             mimeType: 'image/jpeg',
-//             data: imageBase64
-//           }
-//         });
-//       }
-
-//       const response = await this.ai.models.generateContent({
-//         model: "gemini-3-flash-preview",
-//         contents: [contents],
-//         config: {
-//           systemInstruction: SYSTEM_INSTRUCTION,
-//           responseMimeType: "application/json",
-//           temperature: 0.2,
-//         },
-//       });
-
-//       if (!response.text) throw new Error("No response from AI");
-//       return JSON.parse(response.text.trim()) as AnalysisResult;
-//     } catch (error) {
-//       console.error("Gemini analysis error:", error);
-//       throw error;
-//     }
-//   }
-// }
-
-// export const geminiService = new GeminiService();

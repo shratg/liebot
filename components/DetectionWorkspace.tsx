@@ -204,15 +204,9 @@ const DetectionWorkspace: React.FC = () => {
       
       const result = await siliconFlowService.analyzeChat(messageTexts);
       
-      setTimeout(() => {
-        setThinkingLogs(prev => [...prev, '逻辑分析完成', '生成风险画像...']);
-      }, 1500);
-      
-      setTimeout(() => {
-        setAnalysisResult(result);
-        setIsAnalyzing(false);
-        setThinkingLogs(prev => [...prev, '分析完成！']);
-      }, 2000);
+      setThinkingLogs(prev => [...prev, '逻辑分析完成', '生成风险画像...', '分析完成！']);
+      setAnalysisResult(result);
+      setIsAnalyzing(false);
       
     } catch (err: any) {
       console.error('分析失败:', err);
